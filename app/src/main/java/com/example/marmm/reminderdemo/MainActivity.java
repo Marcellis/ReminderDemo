@@ -1,30 +1,46 @@
 package com.example.marmm.reminderdemo;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.Toolbar;
+import android.support.v7.widget.helper.ItemTouchHelper;
 import android.text.TextUtils;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
 import android.widget.EditText;
-import android.widget.ListView;
+import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements ReminderAdapter.ReminderClickListener{
 
 
     //Local variables
 
+
+
+//Constants used when calling the update activity
+
+    public static final String EXTRA_REMINDER = "Reminder";
+
+    public static final int REQUESTCODE = 1234;
+
+    private int mModifyPosition;
+
+    public static AppDatabase db;
+
+    private ReminderAdapter mAdapter;
+    private RecyclerView mRecyclerView;
+
+
     private List<Reminder> mReminders;
-    private ArrayAdapter mAdapter;
-    private ListView mListView;
     private EditText mNewReminderText;
 
     @Override
@@ -34,28 +50,72 @@ public class MainActivity extends AppCompatActivity {
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
-        mListView = findViewById(R.id.listView_main);
+        db = AppDatabase.getInstance(this);
+
+        mRecyclerView = findViewById(R.id.recyclerView);
+
+        mRecyclerView.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
+
+        //mRecyclerView.setLayoutManager(new GridLayoutManager(this, 2));
+
         mNewReminderText = findViewById(R.id.editText_main);
 
         mReminders = new ArrayList<>();
-        mAdapter = new ArrayAdapter(this, android.R.layout.simple_list_item_1, mReminders);
-        mListView.setAdapter(mAdapter);
 
-
+       updateUI();
 
 //Set the long click listener for reminders in the list in order to remove a reminder
 
-        mListView.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
 
-            @Override
+/*
 
-            public boolean onItemLongClick(AdapterView<?> parent, View view, int position, long id) {
-                mReminders.remove(position);
-                updateUI();
-                return true;
-            }
-        });
+Add a touch helper to the RecyclerView to recognize when a user swipes to delete a list entry.
 
+An ItemTouchHelper enables touch behavior (like swipe and move) on each ViewHolder,
+
+and uses callbacks to signal when a user is performing these actions.
+
+*/
+
+        ItemTouchHelper.SimpleCallback simpleItemTouchCallback =
+
+                new ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT | ItemTouchHelper.RIGHT) {
+
+                    @Override
+
+                    public boolean onMove(RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder, RecyclerView.ViewHolder
+
+                            target) {
+
+                        return false;
+
+                    }
+
+
+                    //Called when a user swipes left or right on a ViewHolder
+
+                    @Override
+
+                    public void onSwiped(RecyclerView.ViewHolder viewHolder, int swipeDir) {
+
+
+                        //Get the index corresponding to the selected position
+
+                        int position = (viewHolder.getAdapterPosition());
+
+                        //mReminders.remove(position);
+                        db.reminderDao().deleteReminders(mReminders.get(position));
+
+                        mAdapter.notifyItemRemoved(position);
+
+                    }
+
+                };
+
+
+        ItemTouchHelper itemTouchHelper = new ItemTouchHelper(simpleItemTouchCallback);
+
+        itemTouchHelper.attachToRecyclerView(mRecyclerView);
 
 
 
@@ -74,8 +134,8 @@ public class MainActivity extends AppCompatActivity {
 
                 if (!(TextUtils.isEmpty(text))) {
                     //Add the text to the list (datamodel)
-                    mReminders.add(newReminder);
-
+//                    mReminders.add(newReminder);
+db.reminderDao().insertReminders(newReminder);
 
 //Tell the adapter that the data set has been modified: the screen will be refreshed.
 
@@ -119,17 +179,58 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
+
     private void updateUI() {
 
+        mReminders = db.reminderDao().getAllReminders();
         if (mAdapter == null) {
 
-            mAdapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, mReminders);
+            mAdapter = new ReminderAdapter( mReminders, this);
 
-            mListView.setAdapter(mAdapter);
+            mRecyclerView.setAdapter(mAdapter);
 
         } else {
 
-            mAdapter.notifyDataSetChanged();
+            mAdapter.swapList(mReminders);
+
+        }
+
+    }
+
+    @Override
+    public void reminderOnClick(int i) {
+//        Toast.makeText(this, ""+i, Toast.LENGTH_SHORT).show();
+        Intent intent = new Intent(MainActivity.this, UpdateActivity.class);
+
+        mModifyPosition = i;
+
+        intent.putExtra(EXTRA_REMINDER,  mReminders.get(i));
+
+        startActivityForResult(intent, REQUESTCODE);
+
+
+
+    }
+
+
+    @Override
+
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+
+
+        if (requestCode == REQUESTCODE) {
+
+            if (resultCode == RESULT_OK) {
+
+                Reminder updatedReminder = data.getParcelableExtra(MainActivity.EXTRA_REMINDER);
+
+                // New timestamp: timestamp of update
+
+                mReminders.set(mModifyPosition, updatedReminder);
+
+                updateUI();
+
+            }
 
         }
 
