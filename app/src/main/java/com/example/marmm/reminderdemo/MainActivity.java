@@ -1,6 +1,7 @@
 package com.example.marmm.reminderdemo;
 
 import android.content.Intent;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
@@ -43,6 +44,14 @@ public class MainActivity extends AppCompatActivity implements ReminderAdapter.R
     private List<Reminder> mReminders;
     private EditText mNewReminderText;
 
+    public final static int TASK_GET_ALL_REMINDERS = 0;
+
+    public final static int TASK_DELETE_REMINDER = 1;
+
+    public final static int TASK_UPDATE_REMINDER = 2;
+
+    public final static int TASK_INSERT_REMINDER = 3;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -62,8 +71,7 @@ public class MainActivity extends AppCompatActivity implements ReminderAdapter.R
 
         mReminders = new ArrayList<>();
 
-       updateUI();
-
+        new ReminderAsyncTask(TASK_GET_ALL_REMINDERS).execute();
 //Set the long click listener for reminders in the list in order to remove a reminder
 
 
@@ -104,10 +112,8 @@ and uses callbacks to signal when a user is performing these actions.
                         int position = (viewHolder.getAdapterPosition());
 
                         //mReminders.remove(position);
-                        db.reminderDao().deleteReminders(mReminders.get(position));
 
-                        mAdapter.notifyItemRemoved(position);
-
+                        new ReminderAsyncTask(TASK_DELETE_REMINDER).execute(mReminders.get(position));
                     }
 
                 };
@@ -135,11 +141,12 @@ and uses callbacks to signal when a user is performing these actions.
                 if (!(TextUtils.isEmpty(text))) {
                     //Add the text to the list (datamodel)
 //                    mReminders.add(newReminder);
-db.reminderDao().insertReminders(newReminder);
 
+
+                    new ReminderAsyncTask(TASK_INSERT_REMINDER).execute(newReminder);
 //Tell the adapter that the data set has been modified: the screen will be refreshed.
 
-               updateUI();
+
 
                     //Initialize the EditText for the next item
 
@@ -182,7 +189,6 @@ db.reminderDao().insertReminders(newReminder);
 
     private void updateUI() {
 
-        mReminders = db.reminderDao().getAllReminders();
         if (mAdapter == null) {
 
             mAdapter = new ReminderAdapter( mReminders, this);
@@ -226,9 +232,9 @@ db.reminderDao().insertReminders(newReminder);
 
                 // New timestamp: timestamp of update
 
-                mReminders.set(mModifyPosition, updatedReminder);
+                new ReminderAsyncTask(TASK_UPDATE_REMINDER).execute(updatedReminder);
 
-                updateUI();
+                
 
             }
 
@@ -236,5 +242,73 @@ db.reminderDao().insertReminders(newReminder);
 
     }
 
+
+
+    public void onReminderDbUpdated(List list) {
+
+        mReminders = list;
+
+        updateUI();
+
+    }
+
+    public class ReminderAsyncTask extends AsyncTask<Reminder, Void, List> {
+
+
+        private int taskCode;
+
+
+        public ReminderAsyncTask(int taskCode) {
+
+            this.taskCode = taskCode;
+
+        }
+
+
+        @Override
+
+        protected List doInBackground(Reminder... reminders) {
+
+            switch (taskCode){
+
+                case TASK_DELETE_REMINDER:
+
+                    db.reminderDao().deleteReminders(reminders[0]);
+
+                    break;
+
+                case TASK_UPDATE_REMINDER:
+
+                    db.reminderDao().updateReminders(reminders[0]);
+
+                    break;
+
+                case TASK_INSERT_REMINDER:
+
+                    db.reminderDao().insertReminders(reminders[0]);
+
+                    break;
+
+            }
+
+
+            //To return a new list with the updated data, we get all the data from the database again.
+
+            return db.reminderDao().getAllReminders();
+
+        }
+
+
+        @Override
+
+        protected void onPostExecute(List list) {
+
+            super.onPostExecute(list);
+
+            onReminderDbUpdated(list);
+
+        }
+
+    }
 
 }
